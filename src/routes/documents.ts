@@ -5,6 +5,8 @@
 import { Hono } from 'hono';
 import { Database } from 'bun:sqlite';
 import { getById, listPaginated, remove, logAudit } from '../services/database';
+import { extractTaxDocument, autoDetectFormType } from '../services/ocr-service';
+import { generateAllForms, generateForm1040, generateScheduleA, generateScheduleC, generateTaxSummaryPDF } from '../services/pdf-filler';
 import { createLogger } from '../utils/logger';
 import { z } from 'zod';
 
@@ -197,6 +199,33 @@ export function documentRoutes(db: Database) {
     return c.json({ success: true, message: 'Document deleted' });
   });
 
+  // POST /parse — Extract tax data from document text/image content
+  router.post('/parse', async (c) => {
+    const body = await c.req.json();
+    const parsed = z.object({
+      content: z.string().min(1, 'Content is required'),
+      form_type: z.string().optional(),
+    }).safeParse(body);
+
+    if (!parsed.success) {
+      return c.json({ success: false, error: 'Validation failed', details: parsed.error.flatten() }, 400);
+    }
+
+    const { content, form_type } = parsed.data;
+
+    log.info({ contentLength: content.length, formType: form_type || 'auto-detect' }, 'Document parse requested');
+
+    const result = extractTaxDocument(content, form_type);
+
+    if (!result.success) {
+      log.warn({ formType: result.form_type, warnings: result.warnings }, 'Document extraction returned no fields');
+      return c.json({ success: false, error: 'Could not extract data from document', ...result }, 422);
+    }
+
+    log.info({ formType: result.form_type, fieldsFound: result.raw_fields_found, confidence: result.confidence }, 'Document parsed successfully');
+    return c.json({ success: true, ...result });
+  });
+
   // GET /:returnId/checklist — Missing document checklist
   router.get('/:returnId/checklist', (c) => {
     const returnId = c.req.param('returnId');
@@ -284,6 +313,118 @@ export function documentRoutes(db: Database) {
         missing_conditional: missing.filter(m => !!m.condition),
       },
     });
+  });
+
+  // ─── PDF Generation Routes ──────────────────────────────────────────
+
+  // GET /pdf/:returnId — Generate full PDF package (all applicable forms)
+  router.get('/pdf/:returnId', async (c) => {
+    const returnId = c.req.param('returnId');
+    const taxReturn = getById(db, 'tax_returns', returnId) as Record<string, unknown> | undefined;
+    if (!taxReturn) return c.json({ success: false, error: 'Return not found' }, 404);
+
+    try {
+      const forms = await generateAllForms(db, returnId);
+      log.info({ returnId, formCount: forms.length }, 'PDF package generated');
+
+      // If single form requested via query param ?download=true, merge would go here.
+      // For now return the first form (1040) as the primary PDF.
+      // Multiple forms are returned as JSON with base64 if accept header is json.
+      const accept = c.req.header('Accept') || '';
+
+      if (accept.includes('application/json')) {
+        // Return all forms as base64 JSON array
+        const payload = forms.map(f => ({
+          name: f.name,
+          size: f.data.length,
+          data_base64: Buffer.from(f.data).toString('base64'),
+        }));
+        return c.json({ success: true, data: { return_id: returnId, forms: payload } });
+      }
+
+      // Default: return the combined 1040 as application/pdf
+      const primary = forms[0];
+      c.header('Content-Type', 'application/pdf');
+      c.header('Content-Disposition', `inline; filename="TaxReturn_${returnId}_${taxReturn.tax_year || 2025}.pdf"`);
+      c.header('Content-Length', String(primary.data.length));
+      return c.body(primary.data);
+    } catch (err: any) {
+      log.error({ returnId, err: err.message }, 'PDF generation failed');
+      return c.json({ success: false, error: 'PDF generation failed', details: err.message }, 500);
+    }
+  });
+
+  // GET /pdf/:returnId/:formName — Generate a specific form
+  router.get('/pdf/:returnId/:formName', async (c) => {
+    const returnId = c.req.param('returnId');
+    const formName = c.req.param('formName').toLowerCase();
+    const taxReturn = getById(db, 'tax_returns', returnId) as Record<string, any> | undefined;
+    if (!taxReturn) return c.json({ success: false, error: 'Return not found' }, 404);
+
+    const clientData = taxReturn.client_id
+      ? getById(db, 'clients', taxReturn.client_id as string) as Record<string, any> | undefined
+      : undefined;
+
+    try {
+      let pdfBytes: Uint8Array;
+      let fileName: string;
+
+      switch (formName) {
+        case '1040':
+        case 'form1040': {
+          const incomeItems = db.prepare('SELECT * FROM income_items WHERE return_id = ? ORDER BY category, amount DESC').all(returnId) as any[];
+          const deductions = db.prepare('SELECT * FROM deductions WHERE return_id = ? ORDER BY category, amount DESC').all(returnId) as any[];
+          const dependents = db.prepare('SELECT * FROM dependents WHERE return_id = ? ORDER BY first_name').all(returnId) as any[];
+          pdfBytes = await generateForm1040(taxReturn, clientData, incomeItems, deductions, dependents);
+          fileName = `Form1040_${returnId}.pdf`;
+          break;
+        }
+        case 'schedulec':
+        case 'schedule-c':
+        case 'schc': {
+          const businessIncome = db.prepare('SELECT * FROM income_items WHERE return_id = ? ORDER BY category, amount DESC').all(returnId) as any[];
+          pdfBytes = await generateScheduleC(taxReturn, businessIncome);
+          fileName = `ScheduleC_${returnId}.pdf`;
+          break;
+        }
+        case 'schedulea':
+        case 'schedule-a':
+        case 'scha': {
+          const itemizedDeductions = db.prepare(
+            `SELECT * FROM deductions WHERE return_id = ? AND category IN (
+              'medical','state_local_taxes','property_taxes','mortgage_interest',
+              'charitable_cash','charitable_noncash','casualty_loss','gambling_loss',
+              'investment_expense','other_itemized'
+            ) ORDER BY category, amount DESC`
+          ).all(returnId) as any[];
+          pdfBytes = await generateScheduleA(taxReturn, itemizedDeductions);
+          fileName = `ScheduleA_${returnId}.pdf`;
+          break;
+        }
+        case 'summary':
+        case 'taxsummary': {
+          pdfBytes = await generateTaxSummaryPDF(taxReturn, clientData, taxReturn);
+          fileName = `TaxSummary_${returnId}.pdf`;
+          break;
+        }
+        default:
+          return c.json({
+            success: false,
+            error: `Unknown form: ${formName}`,
+            available_forms: ['form1040', 'scheduleC', 'scheduleA', 'summary'],
+          }, 400);
+      }
+
+      log.info({ returnId, formName, bytes: pdfBytes.length }, 'Individual form PDF generated');
+
+      c.header('Content-Type', 'application/pdf');
+      c.header('Content-Disposition', `inline; filename="${fileName}"`);
+      c.header('Content-Length', String(pdfBytes.length));
+      return c.body(pdfBytes);
+    } catch (err: any) {
+      log.error({ returnId, formName, err: err.message }, 'PDF form generation failed');
+      return c.json({ success: false, error: 'PDF generation failed', details: err.message }, 500);
+    }
   });
 
   return router;

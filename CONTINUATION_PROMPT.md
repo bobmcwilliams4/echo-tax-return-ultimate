@@ -111,13 +111,23 @@ All cloned to `C:\ECHO_OMEGA_PRIME\TAX_RESEARCH\`:
 - **Model ID confirmed**: `claude-opus-4-7` (launched April 16, 2026, verified via web search)
 
 ### 6. GIT STATUS
-- **2 commits pushed** to `https://github.com/bobmcwilliams4/echo-tax-return-ultimate`:
+- **4 commits pushed** to `https://github.com/bobmcwilliams4/echo-tax-return-ultimate`:
   1. `9459ca4` — Initial release: Echo Tax Return Ultimate v1.0.0
   2. `fba80c0` — Add Next.js frontend with EPT design system + update Claude model to Opus 4.7
-- **1 uncommitted change**: `src/services/tax-calculator.ts` (the 1,062-line rewrite)
-- **Needs commit + push**: The tax calculator rewrite
+  3. `d8c6d5c` — Rewrite tax calculator: 18-step pipeline with capital gains stacking, real EIC, AMT, 7 credits
+  4. `6c85e70` — Fix all route registrations, add return detail page, expand API client
+- **All committed and pushed** — clean working tree
 
-### 7. CODEBASE REFERENCES UPDATED
+### 7. ROUTE FIXES APPLIED (Session 2)
+- Ops routes moved from `/ops` to `/api/v5/ops`
+- CORS updated to include `localhost:3001`
+- Frontend API client paths aligned with backend route patterns
+- Clone endpoint fixed: removed UNIQUE constraint, added `is_clone`/`cloned_from` columns
+- Added `/engine/doctrines` listing endpoint
+- Added `/engine/irc/search` FTS5 search endpoint
+- **35/35 endpoint groups verified passing (200 OK)**
+
+### 8. CODEBASE REFERENCES UPDATED
 - All Claude model references changed from `claude-opus-4-6` to `claude-opus-4-7` in:
   - `src/services/claude-subprocess.ts` (default model constant)
   - `src/routes/engines.ts` (2 occurrences)
@@ -128,10 +138,7 @@ All cloned to `C:\ECHO_OMEGA_PRIME\TAX_RESEARCH\`:
 ## WHAT REMAINS TO BE DONE
 
 ### CRITICAL — Must Complete:
-1. **COMMIT the tax calculator rewrite** — `git add src/services/tax-calculator.ts && git commit && git push`
-2. **Seed 2,800+ doctrine blocks** — Each of the 14 engines (TIE, PIE, ARCS, FIE, STE, BIE, CRE, DEP, EST, CRY, INT, AUD, PLN, LEG, RET) needs 200+ real doctrine blocks with actual tax domain knowledge. Currently only 10 exist in the DB. The doctrines should be seeded via `db/seed.ts` or a separate `db/seed-doctrines.ts` file. Each doctrine block has: id, engine_id, topic, keywords, conclusion_template, reasoning_framework, key_factors, primary_authority, confidence (DEFENSIBLE/AGGRESSIVE/DISCLOSURE/HIGH_RISK).
-3. **Build return detail page** — `frontend/src/app/returns/[id]/page.tsx` — Shows full tax calculation breakdown, income items, deductions, dependents, with edit/delete, calculate button, e-file submission
-4. **Verify all 220+ endpoints work** — Test every route module, every endpoint
+1. **Seed 2,800+ doctrine blocks** — Each of the 14 engines needs 200+ real doctrine blocks with actual tax domain knowledge. Commander has indicated these already exist elsewhere and need to be imported. Each doctrine block has: id, engine_id, topic, keywords, conclusion_template, reasoning_framework, key_factors, primary_authority, confidence (DEFENSIBLE/AGGRESSIVE/DISCLOSURE/HIGH_RISK).
 
 ### Engine Doctrine Coverage Needed (200+ each):
 - **FIE** (Federal Income Engine): All 1040 line items, filing status rules, standard/itemized, brackets, credits, payments

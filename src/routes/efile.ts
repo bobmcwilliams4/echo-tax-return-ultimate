@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import { Database } from 'bun:sqlite';
 import { getById, update, logAudit } from '../services/database';
+import { generateMeFReturn, validateMeFXML } from '../services/mef-xml';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('efile');
@@ -326,6 +327,81 @@ export function efileRoutes(db: Database) {
         xml_hash: xmlHash,
       },
     }, 201);
+  });
+
+  // GET /xml/:returnId — Generate MeF XML
+  router.get('/xml/:returnId', async (c) => {
+    const returnId = c.req.param('returnId');
+    const taxReturn = getById(db, 'tax_returns', returnId) as Record<string, unknown> | undefined;
+    if (!taxReturn) return c.json({ success: false, error: 'Return not found' }, 404);
+
+    try {
+      const xml = await generateMeFReturn(db, returnId);
+
+      logAudit(db, {
+        return_id: returnId,
+        user_id: c.get('userId'),
+        action: 'mef_xml_generated',
+        entity_type: 'tax_return',
+        entity_id: returnId,
+        details: { xml_length: xml.length },
+      });
+
+      // Return as XML or JSON based on Accept header
+      if (c.req.header('Accept')?.includes('application/xml') || c.req.header('Accept')?.includes('text/xml')) {
+        return c.text(xml, 200, { 'Content-Type': 'application/xml; charset=UTF-8' });
+      }
+
+      const xmlHash = new Bun.CryptoHasher('sha256').update(xml).digest('hex');
+      return c.json({
+        success: true,
+        data: {
+          return_id: returnId,
+          xml,
+          xml_hash: xmlHash,
+          xml_length: xml.length,
+          generated_at: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      log.error({ returnId, err }, 'Failed to generate MeF XML');
+      return c.json({ success: false, error: (err as Error).message }, 500);
+    }
+  });
+
+  // POST /validate/:returnId — Validate MeF XML structure
+  router.post('/validate/:returnId', async (c) => {
+    const returnId = c.req.param('returnId');
+    const taxReturn = getById(db, 'tax_returns', returnId) as Record<string, unknown> | undefined;
+    if (!taxReturn) return c.json({ success: false, error: 'Return not found' }, 404);
+
+    try {
+      const xml = await generateMeFReturn(db, returnId);
+      const validation = validateMeFXML(xml);
+
+      logAudit(db, {
+        return_id: returnId,
+        user_id: c.get('userId'),
+        action: 'mef_xml_validated',
+        entity_type: 'tax_return',
+        entity_id: returnId,
+        details: { valid: validation.valid, error_count: validation.errors.length },
+      });
+
+      return c.json({
+        success: true,
+        data: {
+          return_id: returnId,
+          valid: validation.valid,
+          errors: validation.errors,
+          error_count: validation.errors.length,
+          validated_at: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      log.error({ returnId, err }, 'Failed to validate MeF XML');
+      return c.json({ success: false, error: (err as Error).message }, 500);
+    }
   });
 
   return router;
