@@ -32,6 +32,8 @@ import { firmRoutes } from './routes/firms';
 import { planningRoutes } from './routes/planning';
 import { opsRoutes } from './routes/ops';
 import { stateTaxRoutes } from './routes/state-tax';
+import { engineRuntimeRoutes } from './routes/engine-runtime';
+import { preparerRoutes } from './routes/preparer';
 
 import type { HealthCheckResponse } from './types/tax';
 
@@ -139,6 +141,8 @@ api.route('/firm', firmRoutes(db));
 api.route('/planning', planningRoutes(db));
 api.route('/ops', opsRoutes(db));
 api.route('/state-tax', stateTaxRoutes(db));
+api.route('/runtime', engineRuntimeRoutes(db));
+api.route('/preparer', preparerRoutes(db));
 
 // Mount API under /api/v5
 app.route('/api/v5', api);

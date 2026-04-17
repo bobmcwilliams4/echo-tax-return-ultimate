@@ -69,7 +69,10 @@ const LTCG_BRACKETS_2025: Record<string, { zero: number; fifteen: number }> = {
 const STANDARD_DEDUCTION_2025: Record<string, number> = {
   single: 15700, mfj: 31400, mfs: 15700, hoh: 23500, qss: 31400,
 };
-const ADDITIONAL_STD_DED_2025 = { single_over65: 2000, married_over65: 1600 };
+const ADDITIONAL_STD_DED_2025 = {
+  single_over65: 2000,   // Single/HOH per qualifying condition (over 65 or blind)
+  married_over65: 1600,  // MFJ/MFS/QSS per qualifying condition (over 65 or blind)
+};
 
 // ─── FICA / SE Tax ──────────────────────────────────────────────────────
 const SS_WAGE_BASE_2025 = 176100;
@@ -223,6 +226,29 @@ SAVERS_CREDIT_RATES.qss = SAVERS_CREDIT_RATES.mfj;
 const QBI_THRESHOLD_2025: Record<string, number> = {
   single: 191950, mfj: 383900, mfs: 191950, hoh: 191950, qss: 383900,
 };
+
+// ─── Energy Credits (§25C, §25D, §30D) ──────────────────────────────────
+const CLEAN_VEHICLE_CREDIT_NEW = 7500;     // §30D new EV
+const CLEAN_VEHICLE_CREDIT_USED = 4000;    // §25E used EV
+const CLEAN_VEHICLE_AGI_LIMITS: Record<string, number> = {
+  single: 150000, mfj: 300000, mfs: 150000, hoh: 225000, qss: 300000,
+};
+const RESIDENTIAL_ENERGY_RATE = 0.30;      // §25D — 30%, no cap
+const ENERGY_EFFICIENT_HOME_RATE = 0.30;   // §25C — 30%, $3,200 annual cap
+const ENERGY_EFFICIENT_HOME_CAP = 3200;
+
+// ─── Estimated Tax Penalty (Form 2210) ──────────────────────────────────
+const UNDERPAYMENT_PENALTY_RATE = 0.08;    // ~8% annualized rate for 2025
+const UNDERPAYMENT_THRESHOLD = 1000;       // Penalty triggers if owed > $1K
+const SAFE_HARBOR_PERCENT = 0.90;          // 90% of current year tax
+const PRIOR_YEAR_PERCENT = 1.00;           // 100% of prior year tax
+const PRIOR_YEAR_HIGH_AGI = 150000;        // AGI threshold for 110% rule
+const PRIOR_YEAR_HIGH_PERCENT = 1.10;      // 110% if AGI > $150K
+
+// ─── Passive Activity Loss Rules ────────────────────────────────────────
+const PASSIVE_LOSS_EXCEPTION = 25000;      // Active participation exception
+const PASSIVE_LOSS_PHASEOUT_START = 100000;// AGI phaseout starts
+const PASSIVE_LOSS_PHASEOUT_END = 150000;  // Fully phased out
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CORE CALCULATION FUNCTIONS
@@ -606,13 +632,82 @@ export function calculateReturn(db: Database, returnId: string): TaxCalculationR
   // STEP 4: AGI (Adjusted Gross Income — Line 11)
   // ═══════════════════════════════════════════════════════════════════
 
-  const agi = adjustedTotalIncome - adjustments;
+  let agi = adjustedTotalIncome - adjustments;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // STEP 4B: Passive Activity Loss Limitation (Form 8582)
+  // ═══════════════════════════════════════════════════════════════════
+
+  let passiveLossSuspended = 0;
+  let passiveLossAllowed = 0;
+
+  if (rentalIncome < 0) {
+    const rentalLoss = Math.abs(rentalIncome);
+
+    if (filingStatus === 'mfs') {
+      // MFS: no passive loss exception (unless lived apart all year — simplified to $0)
+      passiveLossAllowed = 0;
+      passiveLossSuspended = rentalLoss;
+    } else if (agi >= PASSIVE_LOSS_PHASEOUT_END) {
+      // AGI >= $150K: no exception at all
+      passiveLossAllowed = 0;
+      passiveLossSuspended = rentalLoss;
+    } else if (agi <= PASSIVE_LOSS_PHASEOUT_START) {
+      // AGI <= $100K: full $25K exception
+      passiveLossAllowed = Math.min(rentalLoss, PASSIVE_LOSS_EXCEPTION);
+      passiveLossSuspended = Math.max(0, rentalLoss - passiveLossAllowed);
+    } else {
+      // AGI $100K-$150K: phase out — reduce $25K by 50% of AGI over $100K
+      const phaseoutReduction = (agi - PASSIVE_LOSS_PHASEOUT_START) * 0.50;
+      const reducedException = Math.max(0, PASSIVE_LOSS_EXCEPTION - phaseoutReduction);
+      passiveLossAllowed = Math.min(rentalLoss, reducedException);
+      passiveLossSuspended = Math.max(0, rentalLoss - passiveLossAllowed);
+    }
+
+    if (passiveLossSuspended > 0) {
+      // Re-adjust AGI: add back the disallowed portion of the rental loss
+      agi += passiveLossSuspended;
+      warnings.push(`Passive activity loss limited: $${round2(passiveLossAllowed).toLocaleString()} allowed, $${round2(passiveLossSuspended).toLocaleString()} suspended (carries forward)`);
+      formsGenerated.push('Form 8582');
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // STEP 5: Deductions — Standard vs. Itemized (Schedule A)
   // ═══════════════════════════════════════════════════════════════════
 
-  const standardDeduction = STANDARD_DEDUCTION_2025[filingStatus] || 15700;
+  let standardDeduction = STANDARD_DEDUCTION_2025[filingStatus] || 15700;
+
+  // Additional standard deduction for age 65+ and/or blind (§63(f))
+  const isMarriedFiling = filingStatus === 'mfj' || filingStatus === 'mfs' || filingStatus === 'qss';
+  const additionalPerCondition = isMarriedFiling
+    ? ADDITIONAL_STD_DED_2025.married_over65
+    : ADDITIONAL_STD_DED_2025.single_over65;
+
+  // Check primary taxpayer age (born before Jan 2, 1961 = over 65 for TY2025)
+  const over65Cutoff = new Date('1961-01-02');
+  let additionalStdDedCount = 0;
+  if (client.date_of_birth) {
+    const dob = new Date(client.date_of_birth as string);
+    if (dob < over65Cutoff) additionalStdDedCount++;
+  }
+  if (client.is_blind) additionalStdDedCount++;
+
+  // For MFJ/QSS, also check spouse
+  if ((filingStatus === 'mfj' || filingStatus === 'qss') && client.spouse_date_of_birth) {
+    const spouseDob = new Date(client.spouse_date_of_birth as string);
+    if (spouseDob < over65Cutoff) additionalStdDedCount++;
+  }
+  if ((filingStatus === 'mfj' || filingStatus === 'qss') && client.spouse_is_blind) {
+    additionalStdDedCount++;
+  }
+
+  const additionalStdDed = additionalStdDedCount * additionalPerCondition;
+  standardDeduction += additionalStdDed;
+
+  if (additionalStdDed > 0) {
+    log.info({ additionalStdDed, conditions: additionalStdDedCount }, 'Additional standard deduction applied (age 65+/blind)');
+  }
 
   // Itemized deduction calculation
   let saltTotal = 0;
@@ -890,9 +985,56 @@ export function calculateReturn(db: Database, returnId: string): TaxCalculationR
     formsGenerated.push('Form 1116');
   }
 
+  // --- Energy Credits (§25C, §25D, §30D) ---
+  let energyCredits = 0;
+  let cleanVehicleCredit = 0;
+  let residentialEnergyCredit = 0;
+  let energyEfficientHomeCredit = 0;
+
+  // Clean Vehicle Credit (§30D / §25E)
+  const cleanVehicleItems = deductionItems.filter(
+    d => d.category === 'other_above_line' && d.subcategory === 'clean_vehicle'
+  );
+  if (cleanVehicleItems.length > 0) {
+    const agiLimit = CLEAN_VEHICLE_AGI_LIMITS[filingStatus] || CLEAN_VEHICLE_AGI_LIMITS.single;
+    if (agi <= agiLimit) {
+      for (const item of cleanVehicleItems) {
+        // Use item description/metadata to distinguish new vs used (default: new)
+        const isUsed = (item as Record<string, unknown>).description?.toString().toLowerCase().includes('used');
+        const maxCredit = isUsed ? CLEAN_VEHICLE_CREDIT_USED : CLEAN_VEHICLE_CREDIT_NEW;
+        cleanVehicleCredit += Math.min(item.amount, maxCredit);
+      }
+      formsGenerated.push('Form 8936');
+    } else {
+      warnings.push(`Clean Vehicle Credit not available — AGI ($${round2(agi).toLocaleString()}) exceeds $${agiLimit.toLocaleString()} limit`);
+    }
+  }
+
+  // Residential Clean Energy Credit (§25D) — 30% of cost, no cap
+  const residentialEnergyItems = deductionItems.filter(
+    d => d.category === 'other_above_line' && d.subcategory === 'residential_energy'
+  );
+  if (residentialEnergyItems.length > 0) {
+    const totalCost = residentialEnergyItems.reduce((sum, d) => sum + d.amount, 0);
+    residentialEnergyCredit = totalCost * RESIDENTIAL_ENERGY_RATE;
+    formsGenerated.push('Form 5695');
+  }
+
+  // Energy Efficient Home Improvement Credit (§25C) — 30% of cost, $3,200 cap
+  const energyEfficientItems = deductionItems.filter(
+    d => d.category === 'other_above_line' && d.subcategory === 'energy_efficient_home'
+  );
+  if (energyEfficientItems.length > 0) {
+    const totalCost = energyEfficientItems.reduce((sum, d) => sum + d.amount, 0);
+    energyEfficientHomeCredit = Math.min(totalCost * ENERGY_EFFICIENT_HOME_RATE, ENERGY_EFFICIENT_HOME_CAP);
+    if (!formsGenerated.includes('Form 5695')) formsGenerated.push('Form 5695');
+  }
+
+  energyCredits = cleanVehicleCredit + residentialEnergyCredit + energyEfficientHomeCredit;
+
   // Total nonrefundable credits (capped at tax liability)
   const totalNonrefundable = childTaxCredit + otherDependentCredit + educationCredits +
-    childCareCredit + saversCredit + foreignTaxCredit;
+    childCareCredit + saversCredit + foreignTaxCredit + energyCredits;
   const nonrefundableCapped = Math.min(totalNonrefundable, totalTaxBeforeCredits);
 
   // ═══════════════════════════════════════════════════════════════════
@@ -962,6 +1104,37 @@ export function calculateReturn(db: Database, returnId: string): TaxCalculationR
   const effectiveRate = totalIncome > 0 ? totalTaxBeforeCredits / totalIncome : 0;
 
   // ═══════════════════════════════════════════════════════════════════
+  // STEP 17B: Estimated Tax Penalty (Form 2210)
+  // ═══════════════════════════════════════════════════════════════════
+
+  let estimatedTaxPenalty = 0;
+  const amountOwed = totalTax - totalPayments - totalRefundable;
+  const priorYearTax = (taxReturn.prior_year_tax as number) || 0;
+
+  if (amountOwed > UNDERPAYMENT_THRESHOLD) {
+    const currentYearSafeHarbor = totalTax * SAFE_HARBOR_PERCENT;
+    const priorYearSafeHarbor = priorYearTax * (agi > PRIOR_YEAR_HIGH_AGI ? PRIOR_YEAR_HIGH_PERCENT : PRIOR_YEAR_PERCENT);
+
+    // Penalty applies if payments < 90% of current year AND < 100%/110% of prior year
+    const meetsCurrentYearException = totalPayments >= currentYearSafeHarbor;
+    const meetsPriorYearException = priorYearTax > 0 && totalPayments >= priorYearSafeHarbor;
+
+    if (!meetsCurrentYearException && !meetsPriorYearException) {
+      // Simplified penalty: annualized rate on the underpayment amount
+      const underpayment = Math.max(0, Math.min(currentYearSafeHarbor, totalTax) - totalPayments);
+      estimatedTaxPenalty = round2(underpayment * UNDERPAYMENT_PENALTY_RATE);
+
+      if (estimatedTaxPenalty > 0) {
+        warnings.push(`Estimated tax penalty of $${estimatedTaxPenalty.toLocaleString()} may apply (Form 2210) — underpayment of $${round2(underpayment).toLocaleString()}`);
+        formsGenerated.push('Form 2210');
+      }
+    }
+  }
+
+  // Adjust final refund/owed to include penalty
+  const finalRefundOrOwed = refundOrOwed - estimatedTaxPenalty;
+
+  // ═══════════════════════════════════════════════════════════════════
   // STEP 18: Optimization Suggestions
   // ═══════════════════════════════════════════════════════════════════
 
@@ -973,12 +1146,12 @@ export function calculateReturn(db: Database, returnId: string): TaxCalculationR
     suggestions.push('Consider S-Corp election to reduce SE tax on income above reasonable compensation');
   }
 
-  if (refundOrOwed > 2000) {
-    suggestions.push(`Large refund of $${Math.round(refundOrOwed).toLocaleString()} — consider reducing withholding to increase take-home pay`);
+  if (finalRefundOrOwed > 2000) {
+    suggestions.push(`Large refund of $${Math.round(finalRefundOrOwed).toLocaleString()} — consider reducing withholding to increase take-home pay`);
   }
 
-  if (refundOrOwed < -1000) {
-    suggestions.push(`Underpayment of $${Math.abs(Math.round(refundOrOwed)).toLocaleString()} — consider making estimated payments to avoid penalty`);
+  if (finalRefundOrOwed < -1000) {
+    suggestions.push(`Underpayment of $${Math.abs(Math.round(finalRefundOrOwed)).toLocaleString()} — consider making estimated payments to avoid penalty`);
   }
 
   if (saltTotal > saltCap && mortgageInterest === 0) {
@@ -1001,6 +1174,10 @@ export function calculateReturn(db: Database, returnId: string): TaxCalculationR
     suggestions.push(`$${charitableCarryover.toLocaleString()} charitable deduction carries forward (5-year carryover period)`);
   }
 
+  if (passiveLossSuspended > 0) {
+    suggestions.push(`$${round2(passiveLossSuspended).toLocaleString()} passive loss suspended — deductible when property is disposed of or AGI drops below $${PASSIVE_LOSS_PHASEOUT_END.toLocaleString()}`);
+  }
+
   if (amt > 0) {
     suggestions.push('AMT triggered — consider spreading large itemized deductions across tax years');
   }
@@ -1017,7 +1194,7 @@ export function calculateReturn(db: Database, returnId: string): TaxCalculationR
   log.info({
     returnId, latencyMs: latency,
     agi: round2(agi), taxableIncome: round2(taxableIncome),
-    totalTax: round2(totalTaxBeforeCredits), refundOrOwed: round2(refundOrOwed),
+    totalTax: round2(totalTaxBeforeCredits), refundOrOwed: round2(finalRefundOrOwed),
   }, 'Tax calculation complete');
 
   return {
@@ -1042,13 +1219,19 @@ export function calculateReturn(db: Database, returnId: string): TaxCalculationR
       child_care_credit: round2(childCareCredit),
       saver_credit: round2(saversCredit),
       foreign_tax_credit: round2(foreignTaxCredit),
-      energy_credits: 0,
+      energy_credits: round2(energyCredits),
+      clean_vehicle_credit: round2(cleanVehicleCredit),
+      residential_energy_credit: round2(residentialEnergyCredit),
+      energy_efficient_home_credit: round2(energyEfficientHomeCredit),
       other_credits: 0,
       total: round2(totalCredits),
     },
     total_credits: round2(totalCredits),
     total_payments: round2(totalPayments),
-    refund_or_owed: round2(refundOrOwed),
+    estimated_tax_penalty: round2(estimatedTaxPenalty),
+    passive_loss_suspended: round2(passiveLossSuspended),
+    additional_standard_deduction: round2(additionalStdDed),
+    refund_or_owed: round2(finalRefundOrOwed),
     effective_rate: Math.round(effectiveRate * 10000) / 100,
     marginal_rate: Math.round(marginalRate * 100),
     forms_generated: [...new Set(formsGenerated)],

@@ -197,6 +197,15 @@ post_test "Calc FL" "/api/v5/state-tax/calculate" "{\"return_id\":\"$RETURN_ID\"
 post_test "Calc PA" "/api/v5/state-tax/calculate" "{\"return_id\":\"$RETURN_ID\",\"state\":\"PA\"}"
 post_test "Compare 7 states" "/api/v5/state-tax/compare" "{\"return_id\":\"$RETURN_ID\",\"states\":[\"TX\",\"CA\",\"NY\",\"FL\",\"WA\",\"IL\",\"PA\"]}"
 
+echo "  [Engine Runtime]"
+get_test "Runtime health" "/api/v5/runtime/health"
+get_test "Runtime stats" "/api/v5/runtime/stats"
+get_test "Runtime categories" "/api/v5/runtime/categories"
+get_test "Runtime engines TAXINT" "/api/v5/runtime/engines?category=TAXINT&limit=3"
+post_test "Runtime query" "/api/v5/runtime/query" '{"query":"transfer pricing","limit":3}'
+post_test "Runtime tax query" "/api/v5/runtime/query/tax" '{"query":"depreciation section 179","limit":3}'
+post_test "Claude query" "/api/v5/runtime/claude-query" '{"question":"capital gains tax rates","max_results":3}'
+
 echo ""
 echo "--- PHASE 4: ERROR HANDLING (5 tests) ---"
 get_test "ERR: bad client" "/api/v5/clients/nonexistent" 1

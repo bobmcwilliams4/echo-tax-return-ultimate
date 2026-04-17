@@ -327,6 +327,9 @@ export interface TaxCalculationResult {
   credits: CreditSummary;
   total_credits: number;
   total_payments: number;
+  estimated_tax_penalty: number;
+  passive_loss_suspended: number;
+  additional_standard_deduction: number;
   refund_or_owed: number;
   effective_rate: number;
   marginal_rate: number;
@@ -344,6 +347,9 @@ export interface CreditSummary {
   saver_credit: number;
   foreign_tax_credit: number;
   energy_credits: number;
+  clean_vehicle_credit: number;
+  residential_energy_credit: number;
+  energy_efficient_home_credit: number;
   other_credits: number;
   total: number;
 }
