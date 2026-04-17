@@ -62,7 +62,7 @@ Echo Tax Return Ultimate (ETRU) is a production-grade, AI-powered tax preparatio
 | Validation | Zod |
 | Encryption | AES-256-GCM (Node crypto) |
 | Logging | Pino (structured, PII-redacted) |
-| AI Engine | Claude Opus 4.6 (CLI subprocess) |
+| AI Engine | Claude Opus 4.7 (CLI subprocess) |
 | Payments | Stripe |
 | Documents | pdf-lib, sharp |
 
@@ -90,7 +90,7 @@ PORT=9000                          # Server port
 DATABASE_PATH=./data/returns.db    # SQLite database path
 ECHO_API_KEY=your-api-key          # API authentication key
 ENCRYPTION_KEY=your-32-byte-key    # AES-256 encryption key (hex)
-CLAUDE_MODEL=claude-opus-4-6       # Claude model for deep analysis
+CLAUDE_MODEL=claude-opus-4-7       # Claude model for deep analysis
 CLAUDE_TIMEOUT_MS=60000            # Claude subprocess timeout
 STRIPE_SECRET_KEY=sk_...           # Stripe API key
 STRIPE_WEBHOOK_SECRET=whsec_...    # Stripe webhook secret

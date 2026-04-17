@@ -279,7 +279,7 @@ export function engineRoutes(db: Database) {
     db.prepare(`
       INSERT INTO engine_queries (id, return_id, engine_id, query_text, response_text,
         response_layer, latency_ms, confidence, model_used)
-      VALUES (?, ?, 'CLAUDE', ?, ?, 'claude_deep', ?, 'DEFENSIBLE', 'claude-opus-4-6')
+      VALUES (?, ?, 'CLAUDE', ?, ?, 'claude_deep', ?, 'DEFENSIBLE', 'claude-opus-4-7')
     `).run(queryId, return_id || null, query, claudeResponse, latencyMs);
 
     logAudit(db, {
@@ -296,7 +296,7 @@ export function engineRoutes(db: Database) {
       data: {
         query_id: queryId,
         response: claudeResponse,
-        model: 'claude-opus-4-6',
+        model: 'claude-opus-4-7',
         response_layer: 'claude_deep',
         latency_ms: latencyMs,
       },

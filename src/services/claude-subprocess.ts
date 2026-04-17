@@ -9,7 +9,7 @@ import { createLogger } from '../utils/logger';
 const log = createLogger('claude-subprocess');
 
 const CLAUDE_TIMEOUT_MS = parseInt(process.env.CLAUDE_TIMEOUT_MS || '60000', 10);
-const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-opus-4-6';
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-opus-4-7';
 
 interface ClaudeResponse {
   result: string;
