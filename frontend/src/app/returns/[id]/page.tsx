@@ -10,12 +10,17 @@ interface TaxReturn {
   tax_year: number;
   status: string;
   return_type: string;
+  is_clone: number;
+  cloned_from: string | null;
   total_income: number;
   adjusted_gross_income: number;
+  total_adjustments: number;
   taxable_income: number;
   total_tax: number;
   total_credits: number;
   total_payments: number;
+  total_withholding: number;
+  estimated_payments: number;
   refund_or_owed: number;
   effective_rate: number;
   marginal_rate: number;
