@@ -1,0 +1,17 @@
+node_modules/
+dist/
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.local
+.env.production
+*.pem
+*.key
+*.cert
+*.log
+coverage/
+.DS_Store
+Thumbs.db
+bun.lockb
