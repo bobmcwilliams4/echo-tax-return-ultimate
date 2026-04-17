@@ -58,4 +58,37 @@ export const api = {
   queryEngine: (data: any) => request<any>('/api/v5/engine/query', { method: 'POST', body: JSON.stringify(data) }),
   getDoctrines: () => request<any>('/api/v5/engine/doctrines'),
   searchIRC: (q: string) => request<any>(`/api/v5/engine/irc/search?q=${encodeURIComponent(q)}`),
+
+  // E-File
+  submitEfile: (returnId: string) => request<any>(`/api/v5/efile/${returnId}`, { method: 'POST' }),
+  efileStatus: (returnId: string) => request<any>(`/api/v5/efile/${returnId}/status`),
+  fileExtension: (returnId: string, data: any) => request<any>(`/api/v5/efile/${returnId}/extension`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Calculations
+  calcAMT: (returnId: string) => request<any>(`/api/v5/calc/amt/${returnId}`, { method: 'POST' }),
+  calcNIIT: (returnId: string) => request<any>(`/api/v5/calc/niit/${returnId}`, { method: 'POST' }),
+  calcEstimatedPayments: (returnId: string, data?: any) => request<any>(`/api/v5/calc/estimated-payments/${returnId}`, { method: 'POST', body: JSON.stringify(data || {}) }),
+
+  // Reference
+  getBrackets: (year: number, status?: string) => request<any>(`/api/v5/reference/brackets/${year}${status ? `?filing_status=${status}` : ''}`),
+  getStdDeduction: (year: number, status?: string) => request<any>(`/api/v5/reference/standard-deduction/${year}${status ? `?filing_status=${status}` : ''}`),
+  getLimits: (year: number, account?: string) => request<any>(`/api/v5/reference/contribution-limits/${year}${account ? `?account=${account}` : ''}`),
+  getMileage: (year: number) => request<any>(`/api/v5/reference/mileage-rate/${year}`),
+  getCalendar: (year?: number) => request<any>(`/api/v5/reference/calendar${year ? `?year=${year}` : ''}`),
+
+  // Documents
+  uploadDocument: (data: any) => request<any>('/api/v5/documents', { method: 'POST', body: JSON.stringify(data) }),
+  getDocuments: (returnId: string) => request<any>(`/api/v5/documents/${returnId}`),
+
+  // Compliance
+  runCompliance: (returnId: string) => request<any>(`/api/v5/compliance/check/${returnId}`, { method: 'POST' }),
+  getComplianceReport: (returnId: string) => request<any>(`/api/v5/compliance/report/${returnId}`),
+
+  // Planning
+  get10YearProjection: (clientId: string, data?: any) => request<any>(`/api/v5/planning/10-year/${clientId}`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  getRothLadder: (clientId: string, data: any) => request<any>(`/api/v5/planning/roth-ladder/${clientId}`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Ops
+  getMetrics: () => request<any>('/api/v5/ops/metrics'),
+  getAuditTrail: (returnId: string) => request<any>(`/api/v5/ops/audit/${returnId}`),
 };

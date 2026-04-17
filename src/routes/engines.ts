@@ -303,6 +303,44 @@ export function engineRoutes(db: Database) {
     });
   });
 
+  // GET /doctrines — List all doctrine blocks with optional engine filter
+  router.get('/doctrines', (c) => {
+    const engineId = c.req.query('engine_id');
+    const page = parseInt(c.req.query('page') || '1', 10);
+    const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 200);
+    const offset = (page - 1) * limit;
+
+    let countSql = 'SELECT COUNT(*) as total FROM doctrine_blocks WHERE active = 1';
+    let listSql = 'SELECT * FROM doctrine_blocks WHERE active = 1';
+    const args: unknown[] = [];
+
+    if (engineId) {
+      countSql += ' AND engine_id = ?';
+      listSql += ' AND engine_id = ?';
+      args.push(engineId);
+    }
+
+    listSql += ' ORDER BY engine_id, topic LIMIT ? OFFSET ?';
+
+    const total = (db.prepare(countSql).get(...args) as { total: number }).total;
+    const blocks = db.prepare(listSql).all(...args, limit, offset) as Record<string, unknown>[];
+
+    // Engine summary
+    const engineSummary = db.prepare(`
+      SELECT engine_id, COUNT(*) as count FROM doctrine_blocks WHERE active = 1 GROUP BY engine_id ORDER BY engine_id
+    `).all() as { engine_id: string; count: number }[];
+
+    return c.json({
+      success: true,
+      data: blocks,
+      total,
+      page,
+      limit,
+      engines: Object.fromEntries(engineSummary.map(e => [e.engine_id, e.count])),
+      total_engines: engineSummary.length,
+    });
+  });
+
   // GET /doctrine/:topic — Doctrine block lookup
   router.get('/doctrine/:topic', (c) => {
     const topic = c.req.param('topic');
@@ -336,6 +374,30 @@ export function engineRoutes(db: Database) {
     }));
 
     return c.json({ success: true, data: parsed, count: parsed.length });
+  });
+
+  // GET /irc/search — Full-text IRC search by query string
+  router.get('/irc/search', (c) => {
+    const q = c.req.query('q') || '';
+    if (!q) return c.json({ success: false, error: 'Query parameter q is required' }, 400);
+
+    const sanitized = q.replace(/[^\w\s§.()-]/g, '');
+    let results: Record<string, unknown>[] = [];
+
+    // Try FTS5 first
+    try {
+      results = db.prepare(`
+        SELECT rowid, section, title, full_text, regulations, case_law, revenue_rulings
+        FROM irc_authority_fts WHERE irc_authority_fts MATCH ? LIMIT 20
+      `).all(sanitized) as Record<string, unknown>[];
+    } catch {
+      // FTS5 might not work with complex queries — fall back to LIKE
+      results = db.prepare(`
+        SELECT * FROM irc_authority WHERE title LIKE ? OR full_text LIKE ? OR section LIKE ? LIMIT 20
+      `).all(`%${q}%`, `%${q}%`, `%${q}%`) as Record<string, unknown>[];
+    }
+
+    return c.json({ success: true, data: results, count: results.length, query: q });
   });
 
   // GET /authority/:irc — IRC section search

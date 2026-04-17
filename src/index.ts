@@ -43,7 +43,7 @@ const app = new Hono();
 
 // Global middleware
 app.use('*', cors({
-  origin: ['https://echo-ept.com', 'https://echo-lgt.com', 'http://localhost:3000'],
+  origin: ['https://echo-ept.com', 'https://echo-lgt.com', 'http://localhost:3000', 'http://localhost:3001'],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Echo-API-Key', 'X-Request-ID'],
   exposeHeaders: ['X-Request-ID', 'X-Response-Time'],
@@ -136,12 +136,10 @@ api.route('/billing', billingRoutes(db));
 api.route('/compliance', complianceRoutes(db));
 api.route('/firm', firmRoutes(db));
 api.route('/planning', planningRoutes(db));
+api.route('/ops', opsRoutes(db));
 
 // Mount API under /api/v5
 app.route('/api/v5', api);
-
-// Ops routes (separate auth)
-app.route('/ops', opsRoutes(db));
 
 // ─── Error Handler ──────────────────────────────────────────────────────
 

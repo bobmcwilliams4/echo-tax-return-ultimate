@@ -243,16 +243,13 @@ export function returnRoutes(db: Database) {
 
     const cloneId = crypto.randomUUID().replace(/-/g, '');
 
-    // Clone return
+    // Clone return with is_clone flag and reference to original
     db.prepare(`
-      INSERT INTO tax_returns (id, client_id, tax_year, return_type, status,
+      INSERT INTO tax_returns (id, client_id, tax_year, return_type, status, is_clone, cloned_from,
         total_income, adjusted_gross_income, taxable_income, total_tax, total_credits,
         total_payments, refund_or_owed, deduction_method)
-      SELECT ?, client_id, tax_year, return_type, 'draft',
-        total_income, adjusted_gross_income, taxable_income, total_tax, total_credits,
-        total_payments, refund_or_owed, deduction_method
-      FROM tax_returns WHERE id = ?
-    `).run(cloneId, id);
+      VALUES (?, ?, ?, ?, 'draft', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(cloneId, original.client_id, original.tax_year, original.return_type, id, original.total_income, original.adjusted_gross_income, original.taxable_income, original.total_tax, original.total_credits, original.total_payments, original.refund_or_owed, original.deduction_method);
 
     // Clone income items
     const incomeItems = db.prepare('SELECT * FROM income_items WHERE return_id = ?').all(id) as Record<string, unknown>[];

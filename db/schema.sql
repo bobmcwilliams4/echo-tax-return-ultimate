@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS tax_returns (
   return_type TEXT DEFAULT '1040' CHECK(return_type IN (
     '1040','1040SR','1040NR','1040X','1120','1120S','1065','1041','990'
   )),
+  is_clone INTEGER DEFAULT 0,
+  cloned_from TEXT,
   total_income REAL DEFAULT 0,
   adjusted_gross_income REAL DEFAULT 0,
   total_adjustments REAL DEFAULT 0,
@@ -87,8 +89,7 @@ CREATE TABLE IF NOT EXISTS tax_returns (
   locked_at TEXT,
   filed_at TEXT,
   created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
-  UNIQUE(client_id, tax_year, return_type)
+  updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS income_items (
