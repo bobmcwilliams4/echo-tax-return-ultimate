@@ -48,7 +48,19 @@ const app = new Hono();
 
 // Global middleware
 app.use('*', cors({
-  origin: ['https://echo-ept.com', 'https://echo-lgt.com', 'http://localhost:3000', 'http://localhost:3001'],
+  origin: (origin) => {
+    const allowed = [
+      'https://echo-ept.com',
+      'https://echo-lgt.com',
+      'https://echotax.echo-op.com',
+      'http://localhost:3000',
+      'http://localhost:3001',
+    ];
+    if (!origin) return allowed[0];
+    if (allowed.includes(origin)) return origin;
+    if (origin.endsWith('.vercel.app') && origin.includes('echo-tax-return-ultimate')) return origin;
+    return null;
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Echo-API-Key', 'X-Request-ID'],
   exposeHeaders: ['X-Request-ID', 'X-Response-Time'],

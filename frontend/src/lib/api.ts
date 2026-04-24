@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9000';
+const API_BASE = '';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'echo-tax-ultimate-dev-key';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
