@@ -34,6 +34,8 @@ import { opsRoutes } from './routes/ops';
 import { stateTaxRoutes } from './routes/state-tax';
 import { engineRuntimeRoutes } from './routes/engine-runtime';
 import { preparerRoutes } from './routes/preparer';
+import { authRoutes } from './routes/auth';
+import { claudeMemoryRoutes } from './routes/claude-memory';
 
 import type { HealthCheckResponse } from './types/tax';
 
@@ -115,6 +117,10 @@ app.get('/health/ready', (c) => {
   }
 });
 
+// ─── Public Auth Routes (no API key required) ────────────────────────────
+
+app.route('/api/auth', authRoutes(db));
+
 // ─── API Routes (auth required) ─────────────────────────────────────────
 
 const api = new Hono();
@@ -143,6 +149,7 @@ api.route('/ops', opsRoutes(db));
 api.route('/state-tax', stateTaxRoutes(db));
 api.route('/runtime', engineRuntimeRoutes(db));
 api.route('/preparer', preparerRoutes(db));
+api.route('/memory', claudeMemoryRoutes(db));
 
 // Mount API under /api/v5
 app.route('/api/v5', api);
