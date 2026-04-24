@@ -17,8 +17,10 @@ const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_USER = process.env.SMTP_USER || process.env.ZOHO_EMAIL || '';
 const SMTP_PASS = process.env.SMTP_PASS || process.env.ZOHO_PASSWORD || '';
-const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID || '';
-const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || '';
+const TWILIO_API_KEY_SID = process.env.TWILIO_API_KEY_SID || '';
+const TWILIO_API_KEY_SECRET = process.env.TWILIO_API_KEY_SECRET || '';
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
 const TWILIO_FROM = process.env.TWILIO_FROM_PHONE || '';
 
 async function sendViaResend(to: string, subject: string, text: string, html: string) {
@@ -53,12 +55,17 @@ function getMailer() {
 let twilioClient: ReturnType<typeof twilio> | null = null;
 function getTwilio() {
   if (twilioClient) return twilioClient;
-  if (!TWILIO_SID || !TWILIO_TOKEN) {
-    log.warn('Twilio not configured — SMS OTP will fail');
-    return null;
+  // Prefer API key auth (more secure, rotatable)
+  if (TWILIO_API_KEY_SID && TWILIO_API_KEY_SECRET && TWILIO_ACCOUNT_SID) {
+    twilioClient = twilio(TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET, { accountSid: TWILIO_ACCOUNT_SID });
+    return twilioClient;
   }
-  twilioClient = twilio(TWILIO_SID, TWILIO_TOKEN);
-  return twilioClient;
+  if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+    twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+    return twilioClient;
+  }
+  log.warn('Twilio not configured — SMS OTP will fail');
+  return null;
 }
 
 function sha256(input: string) {
