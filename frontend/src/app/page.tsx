@@ -33,9 +33,11 @@ const FEATURES = [
 
 export default function HomePage() {
   const [health, setHealth] = useState<any>(null);
+  const [runtimeStats, setRuntimeStats] = useState<any>(null);
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => {});
+    api.runtimeStats().then(setRuntimeStats).catch(() => {});
   }, []);
 
   const engineCount = health?.services?.engines ? Object.keys(health.services.engines).length : 14;
@@ -62,16 +64,23 @@ export default function HomePage() {
           </h1>
 
           <p className="mt-6 text-xl leading-relaxed max-w-2xl mx-auto animate-fade-up animate-fade-up-delay-2" style={{ color: 'var(--ept-text-secondary)' }}>
-            AI-native tax preparation with 14 doctrine engines, IRS MeF e-file, and Claude Opus deep analysis. CPA-grade accuracy in milliseconds.
+            AI-native tax preparation with {runtimeStats?.total_engines?.toLocaleString() || '5,500+'} engines, {runtimeStats?.total_doctrines?.toLocaleString() || '57,000+'} doctrines, IRS MeF e-file, and Claude Opus deep analysis.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10 animate-fade-up animate-fade-up-delay-3">
             <Link
-              href="/dashboard"
+              href="/prepare"
               className="px-7 py-3.5 rounded-xl font-semibold text-white transition-all hover:opacity-90 flex items-center gap-2"
               style={{ backgroundColor: 'var(--ept-accent)' }}
             >
-              Open Dashboard <ArrowRight size={16} />
+              Prepare Tax Return <ArrowRight size={16} />
+            </Link>
+            <Link
+              href="/dashboard"
+              className="px-7 py-3.5 rounded-xl border font-semibold transition-all hover:opacity-80"
+              style={{ borderColor: 'var(--ept-border)', color: 'var(--ept-text-secondary)' }}
+            >
+              Open Dashboard
             </Link>
             <Link
               href="/engine"
@@ -89,9 +98,9 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-px rounded-2xl overflow-hidden glow-sm" style={{ backgroundColor: 'var(--ept-border)' }}>
             {[
-              { value: `${engineCount}`, label: 'TAX ENGINES' },
+              { value: runtimeStats?.total_engines?.toLocaleString() || `${engineCount}`, label: 'TAX ENGINES' },
+              { value: runtimeStats?.total_doctrines?.toLocaleString() || '57K+', label: 'DOCTRINES' },
               { value: '220+', label: 'API ENDPOINTS' },
-              { value: '24', label: 'DATABASE TABLES' },
               { value: '2025', label: 'TAX YEAR' },
               { value: uptimeStr || '0m', label: 'UPTIME' },
             ].map((stat) => (

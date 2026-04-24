@@ -54,14 +54,26 @@ export const api = {
   addDependent: (data: any) => request<any>('/api/v5/dependents', { method: 'POST', body: JSON.stringify(data) }),
   getDependents: (returnId: string) => request<any>(`/api/v5/dependents/${returnId}`),
 
-  // Engine
+  // Engine (14 doctrine engines)
   queryEngine: (data: any) => request<any>('/api/v5/engine/query', { method: 'POST', body: JSON.stringify(data) }),
   getDoctrines: () => request<any>('/api/v5/engine/doctrines'),
   searchIRC: (q: string) => request<any>(`/api/v5/engine/irc/search?q=${encodeURIComponent(q)}`),
+  engineHealth: () => request<any>('/api/v5/engine/health'),
+
+  // Engine Runtime (5,500 engines / 57K doctrines)
+  runtimeHealth: () => request<any>('/api/v5/runtime/health'),
+  runtimeStats: () => request<any>('/api/v5/runtime/stats'),
+  runtimeCategories: () => request<any>('/api/v5/runtime/categories'),
+  runtimeEngines: (params?: string) => request<any>(`/api/v5/runtime/engines${params ? `?${params}` : ''}`),
+  runtimeQuery: (data: any) => request<any>('/api/v5/runtime/query', { method: 'POST', body: JSON.stringify(data) }),
+  runtimeTaxQuery: (data: any) => request<any>('/api/v5/runtime/query/tax', { method: 'POST', body: JSON.stringify(data) }),
+  runtimeClaudeQuery: (data: any) => request<any>('/api/v5/runtime/claude-query', { method: 'POST', body: JSON.stringify(data) }),
 
   // E-File
   submitEfile: (returnId: string) => request<any>(`/api/v5/efile/${returnId}`, { method: 'POST' }),
   efileStatus: (returnId: string) => request<any>(`/api/v5/efile/${returnId}/status`),
+  efileMeF: (returnId: string) => request<any>(`/api/v5/efile/xml/${returnId}`),
+  efileValidate: (returnId: string) => request<any>(`/api/v5/efile/validate/${returnId}`, { method: 'POST' }),
   fileExtension: (returnId: string, data: any) => request<any>(`/api/v5/efile/${returnId}/extension`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Calculations
@@ -79,6 +91,8 @@ export const api = {
   // Documents
   uploadDocument: (data: any) => request<any>('/api/v5/documents', { method: 'POST', body: JSON.stringify(data) }),
   getDocuments: (returnId: string) => request<any>(`/api/v5/documents/${returnId}`),
+  parseDocument: (data: any) => request<any>('/api/v5/documents/parse', { method: 'POST', body: JSON.stringify(data) }),
+  getPDF: (returnId: string) => request<any>(`/api/v5/documents/pdf/${returnId}`),
 
   // Compliance
   runCompliance: (returnId: string) => request<any>(`/api/v5/compliance/check/${returnId}`, { method: 'POST' }),
@@ -88,7 +102,34 @@ export const api = {
   get10YearProjection: (clientId: string, data?: any) => request<any>(`/api/v5/planning/10-year/${clientId}`, { method: 'POST', body: JSON.stringify(data || {}) }),
   getRothLadder: (clientId: string, data: any) => request<any>(`/api/v5/planning/roth-ladder/${clientId}`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // State Tax
+  listStates: (type?: string) => request<any>(`/api/v5/state-tax/states${type ? `?type=${type}` : ''}`),
+  stateInfo: (state: string) => request<any>(`/api/v5/state-tax/info/${state}`),
+  calcStateTax: (data: any) => request<any>('/api/v5/state-tax/calculate', { method: 'POST', body: JSON.stringify(data) }),
+  compareStates: (data: any) => request<any>('/api/v5/state-tax/compare', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Preparer (Claude-guided interview)
+  preparerStart: (data?: any) => request<any>('/api/v5/preparer/start', { method: 'POST', body: JSON.stringify(data || {}) }),
+  preparerStatus: (sessionId: string) => request<any>(`/api/v5/preparer/${sessionId}`),
+  preparerAnswer: (sessionId: string, data: any) => request<any>(`/api/v5/preparer/${sessionId}/answer`, { method: 'POST', body: JSON.stringify(data) }),
+  preparerConsult: (sessionId: string, data: any) => request<any>(`/api/v5/preparer/${sessionId}/consult`, { method: 'POST', body: JSON.stringify(data) }),
+  preparerCalculate: (sessionId: string) => request<any>(`/api/v5/preparer/${sessionId}/calculate`, { method: 'POST' }),
+  preparerSummary: (sessionId: string) => request<any>(`/api/v5/preparer/${sessionId}/summary`),
+  preparerGenerate: (sessionId: string) => request<any>(`/api/v5/preparer/${sessionId}/generate`, { method: 'POST' }),
+  preparerSmartPrepare: (data: any) => request<any>('/api/v5/preparer/smart-prepare', { method: 'POST', body: JSON.stringify(data) }),
+  preparerAskClaude: (data: any) => request<any>('/api/v5/preparer/ask-claude', { method: 'POST', body: JSON.stringify(data) }),
+  preparerList: (params?: string) => request<any>(`/api/v5/preparer${params ? `?${params}` : ''}`),
+  preparerDelete: (sessionId: string) => request<any>(`/api/v5/preparer/${sessionId}`, { method: 'DELETE' }),
+
   // Ops
+  opsHealth: () => request<any>('/api/v5/ops/health'),
+  opsDeep: () => request<any>('/api/v5/ops/health/deep'),
   getMetrics: () => request<any>('/api/v5/ops/metrics'),
   getAuditTrail: (returnId: string) => request<any>(`/api/v5/ops/audit/${returnId}`),
+
+  // Billing
+  getBilling: (clientId: string) => request<any>(`/api/v5/billing/${clientId}`),
+
+  // Firm
+  getFirm: () => request<any>('/api/v5/firm'),
 };

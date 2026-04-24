@@ -9,7 +9,15 @@ const NAV_LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/clients', label: 'Clients' },
   { href: '/returns', label: 'Returns' },
+  { href: '/prepare', label: 'Prepare' },
   { href: '/engine', label: 'AI Engine' },
+  { href: '/state-tax', label: 'States' },
+  { href: '/reference', label: 'Reference' },
+  { href: '/compliance', label: 'Compliance' },
+  { href: '/efile', label: 'E-File' },
+  { href: '/planning', label: 'Planning' },
+  { href: '/ops', label: 'Ops' },
+  { href: '/billing', label: 'Billing' },
 ];
 
 export function Navbar() {
